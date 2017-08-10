@@ -10,11 +10,23 @@ public class FileTable {
 
    // major public methods
    public synchronized FileTableEntry falloc( String filename, String mode ) {
-      // allocate a new file (structure) table entry for this file name
-      // allocate/retrieve and register the corresponding inode using dir
-      // increment this inode's count
-      // immediately write back this inode to the disk
-      // return a reference to this file (structure) table entry
+   		// allocate a new file (structure) table entry for this file name
+   		FileTableEntry newEntry = new FileTableEntry(newInode, iNumber, mode);
+	    // allocate/retrieve and register the corresponding inode using dir
+	    // check if Inode exists if doesn't exist, create a new one
+	    iNumber = dir.namei(String fileName);
+	    if(iNumber == -1) {
+	   		iNumber = dir.ialloc(fileName);
+	    }
+	    Inode newInode = new Inode(iNumber);
+	    //add file table to list of tables
+	    this.table.add(newEntry);
+	    // increment this inode's count
+	    newInode.count++;
+	    // immediately write back this inode to the disk
+	    newInode.toDisk(iNumber);
+	    // return a reference to this file (structure) table entry
+	    return newEntry;
    }
 
    public synchronized boolean ffree( FileTableEntry e ) {
