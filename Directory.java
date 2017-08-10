@@ -2,7 +2,7 @@ public class Directory {
    private static int maxChars = 30; // max characters of each file name
 
    // Directory entries
-   private int fsize[];        // each element stores a different file size.
+   private int fsize[];        // each element stores a different file name size.
    private char fnames[][];    // each element stores a different file name.
 
    public Directory( int maxInumber ) { // directory constructor
