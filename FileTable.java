@@ -1,42 +1,104 @@
+import java.util.*;
+
+/**
+ * FileTable: Spawns a new file table entry containing a FD.
+ */
 public class FileTable {
+    private Vector<FileTableEntry> table;
+    private Directory dir;
 
-   private Vector table;         // the actual entity of this file table
-   private Directory dir;        // the root directory 
+    /**
+     * Constructor for FileTable. Assigns table and directory as argument.
+     * @param directory
+     */
+    public FileTable(Directory directory) {
+        table = new Vector<FileTableEntry>();
+        dir = directory;
+    }
 
-   public FileTable( Directory directory ) { // constructor
-      table = new Vector( );     // instantiate a file (structure) table
-      dir = directory;           // receive a reference to the Director
-   }                             // from the file system
+    public synchronized FileTableEntry falloc(String filename, String mode) {
+        short id = -1;
+        Inode inode;
 
-   // major public methods
-   public synchronized FileTableEntry falloc( String filename, String mode ) {
-   		// allocate a new file (structure) table entry for this file name
-   		FileTableEntry newEntry = new FileTableEntry(newInode, iNumber, mode);
-	    // allocate/retrieve and register the corresponding inode using dir
-	    // check if Inode exists if doesn't exist, create a new one
-	    iNumber = dir.namei(String fileName);
-	    if(iNumber == -1) {
-	   		iNumber = dir.ialloc(fileName);
-	    }
-	    Inode newInode = new Inode(iNumber);
-	    //add file table to list of tables
-	    this.table.add(newEntry);
-	    // increment this inode's count
-	    newInode.count++;
-	    // immediately write back this inode to the disk
-	    newInode.toDisk(iNumber);
-	    // return a reference to this file (structure) table entry
-	    return newEntry;
-   }
+        while (true) {
+            if (filename.equals("/")) {
+                id = (short) 0;
+            } else {
+                id = dir.namei(filename);
+            }
 
-   public synchronized boolean ffree( FileTableEntry e ) {
-      // receive a file table entry reference
-      // save the corresponding inode to the disk
-      // free this file table entry.
-      // return true if this file table entry found in my table
-   }
+            // File not found
+            if (id < 0) {
+                if (mode.equals("r")) {
+                    return null;
+                } else {
+                    id = dir.ialloc(filename);
+                    inode = new Inode(id);
+                    inode.flag = 3;
+                    break;
+                }
+            } else {
+                inode = new Inode(id);
+                if (mode.equals("r")) {
+                    if (inode.flag != 2
+                            && inode.flag != 1
+                            && inode.flag != 0) {
+                        if (inode.flag == 3) {
+                            try {
+                                wait();
+                            } catch (InterruptedException e) {
+                            }
+                        }
+                    } else {
+                        inode.flag = 2;
+                        break;
+                    }
+                } else {
+                    if (inode.flag != 1 && inode.flag != 0) {
+                        try {
+                            wait();
+                        } catch (InterruptedException e) {
+                        }
+                    } else {
+                        inode.flag = 3;
+                        break;
+                    }
+                }
+            }
+        }
 
-   public synchronized boolean fempty( ) {
-      return table.isEmpty( );  // return if table is empty 
-   }                            // should be called before starting a format
+        inode.count += 1;
+        inode.toDisk(id);
+
+        FileTableEntry e = new FileTableEntry(inode, id, mode);
+        table.addElement(e);
+        return e;
+    }
+
+    public synchronized boolean ffree(FileTableEntry fte) {
+        Inode inode = new Inode(fte.iNumber);
+        if (!table.remove(fte)) {
+            return false; // return false if fte could not be found within table
+        }
+
+        if (inode.flag != 2) {
+            if (inode.flag == 3) {
+                inode.flag = 1;
+                notifyAll(); // notify all waiting threads
+            }
+        } else {
+            if (inode.count == 1) {
+                notify();
+                inode.flag = 1;
+            }
+        }
+
+        inode.count -= 1;
+        inode.toDisk(fte.iNumber);
+        return true;
+    }
+
+    public synchronized boolean fempty() {
+        return table.isEmpty();
+    }
 }
